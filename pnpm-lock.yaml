@@ -26,6 +26,7 @@ specifiers:
   prisma: ^4.11.0
   react: 18.2.0
   react-dom: 18.2.0
+  srt-parser-2: ^1.2.2
   superjson: 1.12.2
   tailwindcss: ^3.3.0
   typescript: ^5.0.2
@@ -43,6 +44,7 @@ dependencies:
   next-auth: 4.22.0_yucv4tfv7v7nrkw2uguegj6e7e
   react: 18.2.0
   react-dom: 18.2.0_react@18.2.0
+  srt-parser-2: 1.2.2
   superjson: 1.12.2
   zod: 3.21.4
 
@@ -2610,6 +2612,11 @@ packages:
   /source-map-js/1.0.2:
     resolution: {integrity: sha512-R0XvVJ9WusLiqTCEiGCmICCMplcCkIwwR11mOSD9CR5u+IXYdiseeEuXCVAjS54zqwkLcPNnmU4OeJ6tUrWhDw==}
     engines: {node: '>=0.10.0'}
+
+  /srt-parser-2/1.2.2:
+    resolution: {integrity: sha512-SlWIhy9mQGMY8BHv1MkeQbCx6gHUNG0NecZro4QIDxzIpBw3Q0kFjA4EWyE9I+H7VrmdPYBHlvtrKzMLFTKP0g==}
+    hasBin: true
+    dev: false
 
   /stop-iteration-iterator/1.0.0:
     resolution: {integrity: sha512-iCGQj+0l0HOdZ2AEeBADlsRC+vsnDsZsbdSiH1yNSjcfKM7fdpCMfqAL/dwF5BLiw/XhRft/Wax6zQbhq2BcjQ==}

@@ -4,10 +4,20 @@ import { signIn, signOut, useSession } from "next-auth/react";
 
 import { api } from "app/utils/api";
 import { useEffect, useRef, useState } from "react";
+import srtParser2 from "srt-parser-2";
+const srtParser = new srtParser2();
+
+const makePrompt = (line: string) => {
+  return `I want you to act as a text terminal that only answers in a single line with no labels. If asked about dogs your answer should be "Dog, Animal, Nature, Friend" and nothing else
+Question. \nFollowing is the text from part of the audio clip can you in 1-2 words describe the subject of the text also 3-4 related concepts. Make sure to not add anything else \n """${line}"""`;
+};
 
 const Home: NextPage = () => {
   const audioElement = useRef<HTMLAudioElement | null>(null);
   const [id, setId] = useState<NodeJS.Timeout>();
+  const [openAiToken, setOpenAiToken] = useState<string>();
+  const [pexelsToken, setPexelsToken] = useState<string>();
+  const [srtString, setSrtString] = useState<string>();
 
   const startRecording = async () => {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -25,6 +35,9 @@ const Home: NextPage = () => {
 
     mediaRecorder.addEventListener("stop", () => {
       const blob = new Blob(chunks);
+      console.log(blob.size);
+      submitAudio(blob).catch(console.error);
+      // setAudio(blob);
       const audioURL = URL.createObjectURL(blob);
       if (audioElement.current) {
         audioElement.current.src = audioURL;
@@ -42,6 +55,89 @@ const Home: NextPage = () => {
         setId(undefined);
       }, 5000)
     );
+  };
+
+  const submitAudio = async (blob: Blob) => {
+    if (!blob || !openAiToken) return;
+    const formData = new FormData();
+    const audioFile = new File([blob], "file.wav", { type: "audio/wav" });
+    formData.append("file", audioFile);
+    formData.append("model", "whisper-1");
+    formData.append("response_format", "srt");
+    formData.append("language", "en");
+    const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      body: formData,
+      headers: {
+        Authorization: `Bearer ${openAiToken}`,
+      },
+    });
+    const data = await res.text();
+    setSrtString(data);
+    const concepts = (await extractSubjects(data).catch(console.error)) ?? [];
+    const photos = (await getImages(concepts).catch(console.error)) ?? [];
+  };
+
+  const extractSubjects = async (srtString: string | undefined) => {
+    if (!srtString || !openAiToken) return [];
+    const srtData = srtParser.fromSrt(srtString);
+    const prompts = srtData.map((line) => makePrompt(line.text));
+    const concepts: string[] = [];
+    concepts.push(
+      await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${openAiToken}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-3.5-turbo",
+          max_tokens: 300,
+          temperature: 0.0,
+          messages: [{ role: "user", content: prompts[0] }],
+        }),
+      })
+        .then(
+          (res) =>
+            res.json() as Promise<{
+              choices: { message: { content: string } }[];
+            }>
+        )
+        .then((res) => res.choices?.[0]?.message.content || "")
+    );
+    console.log("Concepts found: ", concepts);
+    return concepts.filter((concept) => concept.length);
+  };
+
+  const getImages = async (concepts: string[]) => {
+    if (!concepts[0] || !pexelsToken) return [];
+
+    const photos = [];
+    photos.push(
+      await fetch(
+        `https://api.pexels.com/v1/search?query=${concepts[0]}&per_page=1`,
+        {
+          headers: {
+            Authorization: pexelsToken,
+          },
+        }
+      )
+        .then(
+          (res) =>
+            res.json() as Promise<{
+              photos: { src: { portrait: string } }[];
+            }>
+        )
+        .then((res) => res.photos?.[0]?.src.portrait || "")
+    );
+    console.log("Photos found: ", photos);
+    return photos
+      .filter((photo) => photo.length)
+      .map((photo) => {
+        const url = new URL(photo);
+        url.searchParams.set("w", "675");
+        return url.toString();
+      });
   };
 
   useEffect(() => {
@@ -69,6 +165,13 @@ const Home: NextPage = () => {
             Generate Short video just by talking into the mic!
           </p>
           <div className="flex flex-col items-center gap-2">
+            <input
+              type="text"
+              // tailwind input styles
+              className="w-full rounded-md border border-gray-300 px-4 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm"
+              placeholder="OpenAI Token"
+              onChange={(e) => setOpenAiToken(e.target.value)}
+            />
             <button
               className="flex items-center justify-between gap-x-1 rounded-full bg-[hsl(280,100%,71%)] px-10 py-3 font-semibold text-white no-underline transition hover:bg-[hsl(280,100%,71%,0.8)]"
               onClick={() => {
@@ -86,7 +189,24 @@ const Home: NextPage = () => {
               </svg>
               <span>{!!id ? "Recording" : "Record Audio"}</span>
             </button>
-            <audio ref={audioElement}></audio>
+            <div
+              className={`mt-4 flex flex-col gap-y-2 transition-opacity ${
+                audioElement.current?.src ? "opacity-100" : "opacity-0"
+              }`}
+            >
+              <audio ref={audioElement} controls></audio>
+              {/* <button
+                onClick={submitAudio}
+                className="rounded-full bg-[hsl(280,100%,71%)] px-10 py-3 font-semibold text-white no-underline transition hover:bg-[hsl(280,100%,71%,0.8)]"
+              >
+                {" "}
+                Generate Video
+              </button> */}
+            </div>
+            <h4 className="mt-4 font-bold text-white">Transcribed Text</h4>
+            <pre className="border-1 max-w-screen-md overflow-x-scroll rounded-lg border-zinc-500 bg-zinc-900 p-4 text-white">
+              <code>{srtString}</code>
+            </pre>
             {/* <AuthShowcase /> */}
           </div>
         </div>
