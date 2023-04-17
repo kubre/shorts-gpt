@@ -1,8 +1,10 @@
-# Shorts GPT
+# Shorts GPT **(NOT READY YET)**
 
 Create short form video content using AI.
 
 <img src="concept.png" style="min-height: 100px; background">
+
+- For images and videos pexels is being used which can be swapped out for google search or DALL E, etc.
 
 ### Development
 
