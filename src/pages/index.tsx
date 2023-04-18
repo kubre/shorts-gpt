@@ -4,6 +4,7 @@ import Head from "next/head";
 import { useEffect, useRef, useState } from "react";
 import srtParser2 from "srt-parser-2";
 
+
 const srtParser = new srtParser2();
 
 const makePromptForPexels = (lines: string[]) => {
@@ -12,13 +13,23 @@ const makePromptForPexels = (lines: string[]) => {
   )}""" \n Output: `;
 };
 
+const makePromptForGoogle = (lines: string[]) => {
+  return `You're a program, which takes N lines separated by '\n' as input. All the lines are related. Your task is to for each line detect subject of that line in 3-4 words. Just like Input, Output must be in N lines. \n Input: "${lines.join(
+    " \n "
+  )}" \n Output: `;
+};
+
 const RECORDING_LIMIT_MS = 31_000;
+
+const googleApiCreds = {}
 
 const Home: NextPage = () => {
   const audioElement = useRef<HTMLAudioElement | null>(null);
   const [id, setId] = useState<NodeJS.Timeout>();
-  const [openAiToken, setOpenAiToken] = useState<string>("");
-  const [pexelsToken, setPexelsToken] = useState<string>("");
+  const [openAiToken, setOpenAiToken] = useState<string>(
+    ""
+  );
+  const [pexelsToken, setPexelsToken] = useState<string>("abcd");
   const [srtString, setSrtString] = useState<string>();
   const [imageElems, setImageElems] = useState<string>("");
 
@@ -77,7 +88,8 @@ const Home: NextPage = () => {
     const data = await res.text();
     setSrtString(data);
     const concepts = (await extractSubjects(data).catch(console.error)) ?? [];
-    const photos = (await getImages(concepts).catch(console.error)) ?? [];
+    const photos =
+      (await getImages(concepts, "pexels").catch(console.error)) ?? [];
     const makeImg = (url: string) =>
       `<img src="${url}" style="height: 200px; width: auto" />`;
     setImageElems(photos.map(makeImg).join(""));
@@ -86,7 +98,7 @@ const Home: NextPage = () => {
   const extractSubjects = async (srtString: string | undefined) => {
     if (!srtString || !openAiToken) return [];
     const srtData = srtParser.fromSrt(srtString);
-    const userPrompt = makePromptForPexels(srtData.map((item) => item.text));
+    const userPrompt = makePromptForGoogle(srtData.map((item) => item.text));
     const concepts = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -116,10 +128,8 @@ const Home: NextPage = () => {
     return concepts;
   };
 
-  const getImages = async (concepts: string[]) => {
-    if (!concepts[0] || !pexelsToken) return [];
-
-    const photos = await Promise.all(
+  const getPexelsImages = async (concepts: string[]) => {
+    return await Promise.all(
       concepts.map(
         async (concept) =>
           await fetch(
@@ -137,15 +147,39 @@ const Home: NextPage = () => {
                 }>
             )
             .then((res) => res.photos?.[0]?.src.portrait || "")
+            .then((photoUrl) => {
+              const url = new URL(photoUrl);
+              url.searchParams.set("w", "675");
+              return url.toString();
+            })
       )
     );
-    return photos
-      .filter((photo) => photo.length)
-      .map((photo) => {
-        const url = new URL(photo);
-        url.searchParams.set("w", "675");
-        return url.toString();
-      });
+  };
+
+  const getImages = async (
+    concepts: string[],
+    provider: "pexels" | "google"
+  ) => {
+    if (!concepts[0] || !pexelsToken || !googleApiCreds) return [];
+
+    const url = (query: string) => {
+      const _url = new URL("https://www.googleapis.com/customsearch/v1");
+      for (const [key, value] of Object.entries(googleApiCreds)) {
+        _url.searchParams.set(key, value);
+      }
+      _url.searchParams.set("q", query);
+      return _url.toString();
+    };
+
+    const photos = await Promise.all(
+      concepts.map((concept) =>
+        fetch(url(concept))
+          .then((res) => res.json() as Promise<{ items: { link: string }[] }>)
+          .then((res) => res.items?.[0]?.link || "")
+      )
+    );
+
+    return photos.filter((photo) => photo.length);
   };
 
   useEffect(() => {
